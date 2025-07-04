@@ -1,0 +1,9 @@
+OPERATION=$1
+
+INSTANCEID=i-01166463ddfaed9eb
+
+aws ec2 ${OPERATION}-instances --instance-ids $INSTANCEID
+
+sleep 20
+
+ssh-ec2.sh
