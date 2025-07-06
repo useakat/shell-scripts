@@ -1,6 +1,7 @@
 #!/bin/bash
 
 INSTANCE_ID="i-01166463ddfaed9eb"  # RNAseq instance
+AWS_REGION=${AWS_REGION:-us-east-1} # Default to us-east-1 if not set
 
 # --- Functions ---
 
@@ -11,7 +12,7 @@ show_help() {
     echo "Commands:"
     echo "  start [instance_type]   Start the EC2 instance. Optionally change the instance type before starting."
     echo "  stop                    Stop the EC2 instance."
-    echo "  status                  Get the current status of the EC2 instance."
+    echo "  status                  Get the current status and type of the EC2 instance."
     echo "  help, -h                Show this help message."
     echo ""
     echo "Options:"
@@ -21,6 +22,11 @@ show_help() {
 # Function to get the current instance state
 get_instance_state() {
     aws ec2 describe-instances --instance-ids "${INSTANCE_ID}" --query "Reservations[0].Instances[0].State.Name" --output text
+}
+
+# Function to get the current instance status and type
+get_instance_status() {
+    aws ec2 describe-instances --instance-ids "${INSTANCE_ID}" --query "Reservations[0].Instances[0].{State:State.Name, Type:InstanceType}" --output json
 }
 
 # --- Main Script ---
@@ -34,12 +40,10 @@ if [ -z "$OPERATION" ] || [ "$OPERATION" = "help" ] || [ "$OPERATION" = "-h" ]; 
     exit 0
 fi
 
-# Get and show current instance status
-CURRENT_STATE=$(get_instance_state)
-echo "Instance ${INSTANCE_ID} is currently: ${CURRENT_STATE}"
-
 case "$OPERATION" in
     start)
+        CURRENT_STATE=$(get_instance_state)
+        echo "Instance ${INSTANCE_ID} is currently: ${CURRENT_STATE}"
         # If an instance type is specified, modify it before starting
         if [ -n "$INSTANCE_TYPE" ]; then
             if [ "$CURRENT_STATE" = "stopped" ]; then
@@ -56,9 +60,11 @@ case "$OPERATION" in
         echo "Waiting for instance to be ready..."
         sleep 20
         echo "Connecting via SSH..."
-        ssh-ec2.sh
+        /home/useakat/shell-scripts/ssh-ec2.sh
         ;;
     stop)
+        CURRENT_STATE=$(get_instance_state)
+        echo "Instance ${INSTANCE_ID} is currently: ${CURRENT_STATE}"
         if [ -n "$INSTANCE_TYPE" ]; then
             echo "Warning: Instance type can only be changed with the 'start' command. Ignoring type change."
         fi
@@ -66,7 +72,12 @@ case "$OPERATION" in
         aws ec2 stop-instances --instance-ids "${INSTANCE_ID}"
         ;;
     status)
-        # The status has already been printed above.
+        echo "Getting status for instance ${INSTANCE_ID}..."
+        STATUS_OUTPUT=$(get_instance_status)
+        INSTANCE_STATE=$(echo "$STATUS_OUTPUT" | grep "State" | awk -F'\"' '{print $4}')
+        INSTANCE_TYPE_INFO=$(echo "$STATUS_OUTPUT" | grep "Type" | awk -F'\"' '{print $4}')
+        echo "  - Current State: ${INSTANCE_STATE}"
+        echo "  - Instance Type: ${INSTANCE_TYPE_INFO}"
         exit 0
         ;;
     *)
